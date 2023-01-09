@@ -36,7 +36,7 @@ public class ProxyServer {
 
     private void acceptClient(Selector selector, ServerSocketChannel serverSocket)
             throws IOException {
-        SocketChannel client = serverSocket.accept(); // TODO client is null vor some reason
+        SocketChannel client = serverSocket.accept();
         client.configureBlocking(false);
         client.register(selector, SelectionKey.OP_READ);
     }
@@ -84,13 +84,14 @@ public class ProxyServer {
                 try {
                     if (key.isAcceptable()) {
                         acceptClient(selector, serverSocket);
+                        iterator.remove();
                         continue;
                     }
                     if (key.isReadable()) {
                         receiveFromClient(buffer, key);
+                        iterator.remove();
                         continue;
                     } // TODO parse packet
-                    iterator.remove();
                 } catch (IOException e) {
                     e.printStackTrace();
                     key.cancel();
