@@ -2,6 +2,7 @@ package ru.nsu.fit.shuvalov.socks.proxy;
 
 import sun.misc.SignalHandler;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -9,14 +10,13 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.Arrays;
-import java.util.Iterator;
-import java.util.Set;
+import java.util.*;
 
 public class ProxyServer {
     private int port = 1080;
     private String ip = "0.0.0.0";
     private Selector selector;
+    private final Map<SocketChannel, ClientData> clients = new HashMap<>();
 
     public ProxyServer(int port, String ip) {
         this.port = port;
@@ -34,17 +34,6 @@ public class ProxyServer {
     public ProxyServer() {
     }
 
-    private void acceptClient(Selector selector, ServerSocketChannel serverSocket)
-            throws IOException {
-        SocketChannel client = serverSocket.accept();
-        client.configureBlocking(false);
-        client.register(selector, SelectionKey.OP_READ);
-    }
-
-    public void stop() throws IOException {
-        selector.close();
-    }
-
     private void registerSignalHandler() {
         SignalHandler signalHandler = sig -> {
             try {
@@ -56,15 +45,46 @@ public class ProxyServer {
         DiagnosticSignalHandler.install("INT", signalHandler);
     }
 
-    private void receiveFromClient(ByteBuffer buffer, SelectionKey key) throws IOException {
+    private void acceptClient(Selector selector, ServerSocketChannel serverSocket)
+            throws IOException {
+        SocketChannel client = serverSocket.accept();
+        client.configureBlocking(false);
+        client.register(selector, SelectionKey.OP_READ);
+        clients.put(client, new ClientData());
+    }
+
+    private void receiveConnectionRequest(ByteBuffer buffer, SelectionKey key) throws IOException {
         SocketChannel clientSender = (SocketChannel) key.channel();
+        ClientData clientData = clients.get(clientSender);
         clientSender.read(buffer);
         buffer.flip();
         byte[] bytes = new byte[buffer.remaining()];
         buffer.get(bytes);
-        System.out.println(Arrays.toString(bytes));
+        clientData.addToConnectionRequest(bytes);
+//        System.out.println(Arrays.toString(clientData.connectionRequest));
         buffer.clear();
-        clientSender.close();
+//        clientSender.close();
+        if (clientData.isParsed()) {
+            clientData.state = ClientData.ClientState.CONNECTION_REQUEST_RECEIVED;
+            clientSender.register(selector, SelectionKey.OP_WRITE);
+        }
+    }
+
+    private void sendConnectionResponse(ByteBuffer buffer, SelectionKey key) throws IOException {
+        SocketChannel clientSender = (SocketChannel) key.channel();
+        ClientData clientData = clients.get(clientSender);
+        clientSender.read(buffer);
+        buffer.flip();
+        byte[] bytes = new byte[buffer.remaining()];
+        buffer.get(bytes);
+        clientData.addToConnectionRequest(bytes);
+//        System.out.println(Arrays.toString(clientData.connectionRequest));
+        buffer.clear();
+//        clientSender.close();
+        if (clientData.isParsed()) {
+            clientData.state = ClientData.ClientState.CONNECTION_REQUEST_RECEIVED;
+            clientSender.register(selector, SelectionKey.OP_WRITE);
+        }
     }
 
     public void start() throws IOException {
@@ -88,15 +108,24 @@ public class ProxyServer {
                         continue;
                     }
                     if (key.isReadable()) {
-                        receiveFromClient(buffer, key);
+                        receiveConnectionRequest(buffer, key);
                         iterator.remove();
                         continue;
-                    } // TODO parse packet
+                    }
+//                    if (key.isWritable()) {
+//                        sendConnectionResponse(buffer, key);
+//                        iterator.remove();
+//                        continue;
+//                    }
                 } catch (IOException e) {
                     e.printStackTrace();
                     key.cancel();
                 }
             }
         }
+    }
+
+    public void stop() throws IOException {
+        selector.close();
     }
 }
