@@ -1,9 +1,7 @@
 package ru.nsu.fit.shuvalov.socks.proxy;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 
@@ -19,17 +17,22 @@ public class ClientData {
     public ClientState state = HANDSHAKE;
     public byte[] connectionRequest = {};
     private boolean parsed = false;
+    private ByteBuffer toSend = null;
 
     public enum ClientState {
         HANDSHAKE,
         CONNECTION_REQUEST_RECEIVED
     }
 
+    public ByteBuffer getToSend() {
+        return toSend;
+    }
+
     public boolean isParsed() {
         return parsed;
     }
 
-    private void parse() throws UnknownHostException {
+    private void parse() throws IOException {
         if (connectionRequest.length >= 1 && version == -1) {
             version = Byte.toUnsignedInt(connectionRequest[0]);
         }
@@ -45,16 +48,18 @@ public class ClientData {
         }
         if (version != -1 && command != -1 && destinationPort != -1 && destinationIp != null) {
             parsed = true;
-            System.out.println(Integer.toString(version) + " " + Integer.toString(command) + " " +
-                    Short.toString(destinationPort) + " " + destinationIp);
+            byte[] toSend = ByteUtilities.concatenate(
+                    ByteUtilities.concatenate(
+                            new byte[]{0x00, 0x5A},
+                            ByteUtilities.shortToByteArray(getDestinationPort())),
+                    getDestinationIp().getBytes()
+            );
+            this.toSend = ByteBuffer.wrap(toSend);
         }
     }
 
     public void addToConnectionRequest(byte[] bytes) throws IOException {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-        outputStream.write(connectionRequest);
-        outputStream.write(bytes);
-        connectionRequest = outputStream.toByteArray();
+        connectionRequest = ByteUtilities.concatenate(connectionRequest, bytes);
         parse();
     }
 
@@ -90,7 +95,7 @@ public class ClientData {
         return command;
     }
 
-    public int getDestinationPort() {
+    public short getDestinationPort() {
         return destinationPort;
     }
 
