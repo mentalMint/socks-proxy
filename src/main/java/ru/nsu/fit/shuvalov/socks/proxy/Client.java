@@ -9,13 +9,15 @@ import java.nio.channels.SocketChannel;
 public class Client {
     public final ClientData clientData = new ClientData();
     public SocketChannel socketChannel = null;
-    public void receiveConnectionRequest(ByteBuffer buffer, Selector selector) throws IOException {
-        socketChannel.read(buffer);
-        buffer.flip();
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
+    public ByteBuffer receiveBuffer = ByteBuffer.allocate(1024);
+
+    public void receiveConnectionRequest(Selector selector) throws IOException {
+        socketChannel.read(receiveBuffer);
+        receiveBuffer.flip();
+        byte[] bytes = new byte[receiveBuffer.remaining()];
+        receiveBuffer.get(bytes);
         clientData.addToConnectionRequest(bytes);
-        buffer.clear();
+        receiveBuffer.clear();
         if (clientData.isParsed()) {
             System.out.println("Request received: " + clientData.getVersion() + " " + clientData.getCommand() + " " +
                     clientData.getDestinationPort() + " " + clientData.getDestinationIp());
@@ -31,12 +33,12 @@ public class Client {
         }
     }
 
-    public byte[] receive(ByteBuffer buffer) throws IOException {
-        socketChannel.read(buffer);
-        buffer.flip();
-        byte[] bytes = new byte[buffer.remaining()];
-        buffer.get(bytes);
-        buffer.clear();
-        return bytes;
+    public void receive() throws IOException {
+        socketChannel.read(receiveBuffer);
+        receiveBuffer.flip();
+    }
+
+    public void send(ByteBuffer buffer) throws IOException {
+        while(socketChannel.write(buffer) > 0);
     }
 }
